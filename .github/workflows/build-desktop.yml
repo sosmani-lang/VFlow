@@ -1,0 +1,56 @@
+name: Build Desktop Recorder
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop-recorder/**'
+      - '.github/workflows/build-desktop.yml'
+    tags:
+      - 'desktop-v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop-recorder
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: desktop-recorder/package-lock.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+        # Use `install` not `ci` since the lockfile is generated on first build.
+
+      - name: Build NSIS installer (unsigned)
+        run: npm run build
+        env:
+          # Ensure electron-builder doesn't try to publish on push events
+          GH_TOKEN: ''
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VFlowRecorder-Windows
+          path: desktop-recorder/dist/VFlowRecorder-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release on tag
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop-recorder/dist/VFlowRecorder-Setup-*.exe
+          name: Desktop Recorder ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
